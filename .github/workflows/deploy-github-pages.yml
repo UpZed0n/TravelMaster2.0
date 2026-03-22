@@ -5,6 +5,7 @@ name: Deploy GitHub Pages
 on:
   push:
     branches: [main]
+  workflow_dispatch: # Actions 页可手动「Run workflow」重跑部署
 
 permissions:
   contents: read
