@@ -1,0 +1,3 @@
+# Capacitor 原生工程不参与 Vercel 构建，减小上传体积
+web/android
+web/ios

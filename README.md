@@ -41,6 +41,17 @@ npm run dev
 
 （以 Settings → Pages 顶部显示的 **Visit site** 为准。）
 
+## Vercel 部署（推荐，根路径访问）
+
+仓库根目录已包含 [`vercel.json`](vercel.json)：在 `web/` 内安装依赖、执行 `next build`，并发布静态导出目录 `web/out`。
+
+1. 打开 [Vercel](https://vercel.com) → **Add New…** → **Project** → 导入 [UpZed0n/TravelMaster2.0](https://github.com/UpZed0n/TravelMaster2.0)。
+2. **不要**改 Build/Output 覆盖项（沿用 `vercel.json` 即可）；如需在控制台填环境变量，可添加 `NEXT_PUBLIC_AMAP_KEY`、`NEXT_PUBLIC_AMAP_SECURITY_CODE` 等（勿提交进 Git）。
+3. **不要**在 Vercel 里设置 `NEXT_PUBLIC_BASE_PATH`：该变量仅用于 GitHub Pages 子路径；Vercel 默认部署在域名根路径，不设才能正常加载 `_next` 静态资源。
+4. 部署完成后，在[高德控制台](https://console.amap.com/)为 Key 配置 **`*.vercel.app`**（及你的自定义域名）的安全域名白名单。
+
+也可用 [Vercel CLI](https://vercel.com/docs/cli)：`vercel`（首次登录按提示操作），项目链接信息在本地 `.vercel/`，已写入 `.gitignore`。
+
 ## 移动端
 
 ```bash
