@@ -1,0 +1,51 @@
+# 推送到 main 后构建静态站点并发布到 GitHub Pages
+# 使用前请在仓库 Settings → Pages → Build and deployment → Source 选「GitHub Actions」
+name: Deploy GitHub Pages
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install and build
+        env:
+          # 须与仓库名一致，站点地址：https://<用户>.github.io/TravelMaster2.0/
+          NEXT_PUBLIC_BASE_PATH: /TravelMaster2.0
+        run: |
+          cd web
+          npm ci
+          npm run build
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web/out
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

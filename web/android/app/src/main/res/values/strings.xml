@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Tour Talk</string>
+    <string name="title_activity_main">Tour Talk</string>
+    <string name="package_name">com.tourtalk.app</string>
+    <string name="custom_url_scheme">com.tourtalk.app</string>
+</resources>

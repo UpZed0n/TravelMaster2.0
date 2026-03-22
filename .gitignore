@@ -1,0 +1,22 @@
+# ========== 密钥与本地环境（切勿提交）==========
+**/.env
+**/.env.local
+**/.env.*.local
+**/*.pem
+
+# Web 应用构建产物与依赖
+web/node_modules/
+web/.next/
+web/out/
+web/.vercel
+web/npm-debug.log*
+web/yarn-error.log*
+
+# 可选：不提交 Cursor 本地配置（如需保留计划可删掉下一行）
+.cursor/
+
+# 系统与 IDE
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
