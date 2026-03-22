@@ -61,3 +61,4 @@ npm run cap:open:android
 ```
 
 需本机安装 Android Studio / Xcode。
+用户手动在设置中填写千问AI的key以及高德地图API key和安全密钥
