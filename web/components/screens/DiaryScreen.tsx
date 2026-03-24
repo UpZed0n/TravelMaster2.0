@@ -2,9 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
-import { Copy, Plus, Sparkles, Trash2 } from "lucide-react";
+import { Plus, Sparkles, Trash2 } from "lucide-react";
 import { streamChatCompletion, type ChatMessage } from "@/lib/ai/streamOpenAI";
-import { copyText } from "@/lib/clipboard";
 import { db, type DiaryRecord, type ScheduleEventRecord } from "@/lib/db";
 import { useSettingsStore } from "@/store/settings";
 import { useSelectionStore } from "@/store/selection";
@@ -30,10 +29,11 @@ export function DiaryScreen({ onBack }: { onBack: () => void }) {
   const [diaries, setDiaries] = useState<DiaryRecord[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [content, setContent] = useState("");
-  const [aiOut, setAiOut] = useState("");
   const [busy, setBusy] = useState(false);
-  const [copyHint, setCopyHint] = useState("");
+  const [assistHint, setAssistHint] = useState("");
   const activeIdRef = useRef<string | null>(null);
+  const aiBufferedRef = useRef("");
+  const aiFlushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   activeIdRef.current = activeId;
 
   const planId = activePlanId ?? "";
@@ -143,7 +143,7 @@ export function DiaryScreen({ onBack }: { onBack: () => void }) {
   const aiAssist = async () => {
     if (!apiKey || !planId || !activeId) return;
     setBusy(true);
-    setAiOut("");
+    setAssistHint("");
     const plan = await db.plans.get(planId);
     const evs: ScheduleEventRecord[] = plan
       ? await db.scheduleEvents
@@ -163,7 +163,26 @@ export function DiaryScreen({ onBack }: { onBack: () => void }) {
       { role: "user", content: prompt },
     ];
 
-    let acc = "";
+    aiBufferedRef.current = "";
+    setContent("");
+
+    const flushBufferedContent = (immediate = false) => {
+      const flush = () => {
+        aiFlushTimerRef.current = null;
+        setContent(aiBufferedRef.current);
+      };
+      if (immediate) {
+        if (aiFlushTimerRef.current) {
+          clearTimeout(aiFlushTimerRef.current);
+          aiFlushTimerRef.current = null;
+        }
+        flush();
+        return;
+      }
+      if (aiFlushTimerRef.current) return;
+      aiFlushTimerRef.current = setTimeout(flush, 80);
+    };
+
     try {
       for await (const delta of streamChatCompletion({
         baseUrl: apiBaseUrl,
@@ -171,26 +190,23 @@ export function DiaryScreen({ onBack }: { onBack: () => void }) {
         model,
         messages,
       })) {
-        acc += delta;
-        setAiOut(acc);
+        aiBufferedRef.current += delta;
+        flushBufferedContent();
       }
+      flushBufferedContent(true);
+      await persistContent(activeId, aiBufferedRef.current);
+      setAssistHint("已回填到正文，可继续修改");
     } catch (e) {
-      setAiOut(`请求失败：${String((e as Error).message)}`);
+      const msg = `请求失败：${String((e as Error).message)}`;
+      setAssistHint(msg);
+      if (!aiBufferedRef.current) setContent(msg);
+    } finally {
+      if (aiFlushTimerRef.current) {
+        clearTimeout(aiFlushTimerRef.current);
+        aiFlushTimerRef.current = null;
+      }
+      setBusy(false);
     }
-    setBusy(false);
-  };
-
-  const handleCopyAi = async () => {
-    if (!aiOut) return;
-    const ok = await copyText(aiOut);
-    setCopyHint(ok ? "已复制" : "复制失败");
-    setTimeout(() => setCopyHint(""), 2000);
-  };
-
-  const handleInsertAi = () => {
-    if (!aiOut) return;
-    const next = content ? `${content.trimEnd()}\n\n${aiOut}` : aiOut;
-    setContent(next);
   };
 
   const noPlan = !planId;
@@ -275,7 +291,7 @@ export function DiaryScreen({ onBack }: { onBack: () => void }) {
           onChange={(e) => setContent(e.target.value)}
           disabled={noPlan}
           placeholder="今天的行程太棒了！AI帮写日记…"
-          className="h-[min(220px,36vh)] w-full resize-none bg-transparent text-sm text-slate-800 outline-none placeholder:text-slate-400 disabled:opacity-50"
+          className="h-[min(220px,36vh)] w-full resize-none overflow-y-auto bg-transparent text-sm text-slate-800 outline-none placeholder:text-slate-400 disabled:opacity-50"
         />
         <button
           type="button"
@@ -288,37 +304,14 @@ export function DiaryScreen({ onBack }: { onBack: () => void }) {
           )}
         >
           <span className="rounded bg-white/20 px-1 text-xs">AI</span>
-          AI帮写
+          {busy ? "生成中…" : "AI帮写"}
         </button>
       </div>
 
-      {aiOut ? (
-        <div className="relative mt-3 rounded-[24px] border border-white/60 bg-white/55 p-4 pr-10 text-sm leading-relaxed text-slate-700 shadow-md backdrop-blur-md">
-          <div className="absolute -top-2 left-8 h-4 w-4 rotate-45 border-l border-t border-white/60 bg-white/55" />
-          <div className="absolute right-2 top-2 flex flex-col gap-1">
-            <button
-              type="button"
-              onClick={() => void handleCopyAi()}
-              className="rounded-lg bg-white/80 p-1.5 text-slate-600 shadow-sm hover:text-teal-600"
-              title="复制"
-              aria-label="复制 AI 内容"
-            >
-              <Copy className="h-3.5 w-3.5" />
-            </button>
-            <button
-              type="button"
-              onClick={handleInsertAi}
-              disabled={noPlan}
-              className="whitespace-nowrap rounded-lg bg-teal-500/15 px-2 py-1 text-[10px] font-medium text-teal-800 disabled:opacity-40"
-            >
-              插入正文
-            </button>
-          </div>
-          {aiOut}
-          <Sparkles className="absolute bottom-3 right-3 h-4 w-4 text-teal-400" />
-          {copyHint ? (
-            <span className="mt-2 block text-[10px] text-teal-600">{copyHint}</span>
-          ) : null}
+      {assistHint ? (
+        <div className="relative mt-3 rounded-[24px] border border-white/60 bg-white/55 p-3 text-xs text-slate-700 shadow-md backdrop-blur-md">
+          <Sparkles className="absolute right-3 top-3 h-4 w-4 text-teal-400" />
+          {assistHint}
         </div>
       ) : null}
 

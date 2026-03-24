@@ -6,6 +6,7 @@ import { ArrowDownUp, ChevronDown, LocateFixed, MapPin } from "lucide-react";
 import { Drawer } from "vaul";
 import { cn } from "@/lib/utils";
 import { setAmapSecurityConfig } from "@/lib/amap";
+import { getCurrentLocation } from "@/lib/useLocation";
 import { useSettingsStore } from "@/store/settings";
 import { useNavigationStore } from "@/store/navigation";
 
@@ -26,6 +27,7 @@ export function MapScreen({ onBack }: { onBack: () => void }) {
   const mapInstance = useRef<AMapNS>(null);
   const userLngLat = useRef<{ lng: number; lat: number } | null>(null);
   const userAddress = useRef<string>("");
+  const useCurrentAsStart = useRef(false);
 
   const [ready, setReady] = useState(false);
   const [startInput, setStartInput] = useState("");
@@ -36,6 +38,16 @@ export function MapScreen({ onBack }: { onBack: () => void }) {
   const [summary, setSummary] = useState("");
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  const locateAndFill = useCallback(async (AMap: AMapNS, map: AMapNS) => {
+    const loc = await getCurrentLocation(AMap);
+    userLngLat.current = { lng: loc.lng, lat: loc.lat };
+    userAddress.current = loc.address;
+    useCurrentAsStart.current = true;
+    setStartInput(loc.address);
+    new AMap.Marker({ position: [loc.lng, loc.lat], map });
+    map.setCenter([loc.lng, loc.lat]);
+  }, []);
 
   useEffect(() => {
     if (mapSearchQuery) {
@@ -73,24 +85,10 @@ export function MapScreen({ onBack }: { onBack: () => void }) {
         const map = new AMap.Map(mapRef.current, { zoom: 13, viewMode: "2D" });
         mapInstance.current = map;
         setReady(true);
-
-        const geo = new AMap.Geolocation({ enableHighAccuracy: true, timeout: 12000 });
-        geo.getCurrentPosition((status: string, result: AMapNS) => {
-          if (status === "complete" && result?.position) {
-            const { lng, lat } = result.position;
-            userLngLat.current = { lng, lat };
-            userAddress.current =
-              result.formattedAddress ?? `${lng.toFixed(4)}, ${lat.toFixed(4)}`;
-            setStartInput(userAddress.current);
-            new AMap.Marker({ position: [lng, lat], map });
-            map.setCenter([lng, lat]);
-          } else {
-            setStartInput("定位失败，请手动输入起点");
-          }
-        });
+        await locateAndFill(AMap, map);
       } catch (e) {
         console.error(e);
-        setHint("地图加载失败，请检查 Key 与安全密钥。");
+        setHint(String((e as Error).message ?? "地图加载失败，请检查 Key 与安全密钥。"));
       }
     })();
 
@@ -98,7 +96,29 @@ export function MapScreen({ onBack }: { onBack: () => void }) {
       cancelled = true;
       mapInstance.current = null;
     };
-  }, [amapKey, amapSecurity]);
+  }, [amapKey, amapSecurity, locateAndFill]);
+
+  const handleRelocate = useCallback(async () => {
+    const key = amapKey || process.env.NEXT_PUBLIC_AMAP_KEY || "";
+    const sec = amapSecurity || process.env.NEXT_PUBLIC_AMAP_SECURITY_CODE || "";
+    if (!key || !mapInstance.current) {
+      setHint("地图未就绪，请稍后重试");
+      return;
+    }
+    setAmapSecurityConfig(sec);
+    try {
+      const AMapLoader = (await import("@amap/amap-jsapi-loader")).default;
+      const AMap = (await AMapLoader.load({
+        key,
+        version: "2.0",
+        plugins: ["AMap.Geolocation", "AMap.Geocoder"],
+      })) as AMapNS;
+      await locateAndFill(AMap, mapInstance.current);
+    } catch (e) {
+      console.error(e);
+      setHint(String((e as Error).message ?? "定位失败，请手动输入起点"));
+    }
+  }, [amapKey, amapSecurity, locateAndFill]);
 
   const runRoute = useCallback(async () => {
     const key = amapKey || process.env.NEXT_PUBLIC_AMAP_KEY || "";
@@ -136,7 +156,7 @@ export function MapScreen({ onBack }: { onBack: () => void }) {
         });
 
       let origin: AMapNS;
-      if (userLngLat.current && (!startInput || startInput === userAddress.current)) {
+      if (userLngLat.current && useCurrentAsStart.current) {
         origin = new AMap.LngLat(userLngLat.current.lng, userLngLat.current.lat);
       } else {
         const s = await geocode(startInput || "北京市政府");
@@ -229,9 +249,12 @@ export function MapScreen({ onBack }: { onBack: () => void }) {
   }, [startInput, endInput, routeMode, amapKey, amapSecurity]);
 
   const swap = () => {
-    const a = startInput;
-    setStartInput(endInput);
-    setEndInput(a);
+    const prevStart = startInput;
+    const prevEnd = endInput;
+    const currentAddr = userAddress.current;
+    setStartInput(prevEnd);
+    setEndInput(prevStart);
+    useCurrentAsStart.current = !!currentAddr && prevEnd === currentAddr;
   };
 
   return (
@@ -256,7 +279,10 @@ export function MapScreen({ onBack }: { onBack: () => void }) {
                 <span className="text-slate-400">🔍</span>
                 <input
                   value={startInput}
-                  onChange={(e) => setStartInput(e.target.value)}
+                  onChange={(e) => {
+                    useCurrentAsStart.current = false;
+                    setStartInput(e.target.value);
+                  }}
                   placeholder="请输入我的位置"
                   className="min-w-0 flex-1 bg-transparent text-slate-800 outline-none placeholder:text-slate-400"
                 />
@@ -315,6 +341,7 @@ export function MapScreen({ onBack }: { onBack: () => void }) {
         )}
         <button
           type="button"
+          onClick={() => void handleRelocate()}
           className="absolute bottom-24 right-3 z-10 flex h-11 w-11 items-center justify-center rounded-full bg-white shadow-lg"
           aria-label="定位"
         >

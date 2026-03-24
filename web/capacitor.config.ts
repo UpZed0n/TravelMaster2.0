@@ -10,9 +10,6 @@ const config: CapacitorConfig = {
   android: {
     allowMixedContent: true,
   },
-  ios: {
-    contentInset: "automatic",
-  },
 };
 
 export default config;

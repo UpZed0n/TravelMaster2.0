@@ -7,17 +7,16 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "build:mobile": "next build && npx cap sync",
-    "cap:sync": "npx cap sync",
-    "cap:open:android": "npx cap open android",
-    "cap:open:ios": "npx cap open ios"
+    "build:mobile": "next build && npx cap sync android",
+    "cap:sync": "npx cap sync android",
+    "cap:open:android": "npx cap open android"
   },
   "dependencies": {
     "@amap/amap-jsapi-loader": "^1.0.1",
     "@capacitor/android": "^6.2.1",
     "@capacitor/cli": "^6.2.1",
     "@capacitor/core": "^6.2.1",
-    "@capacitor/ios": "^6.2.1",
+    "@capacitor/geolocation": "^6.1.1",
     "@capacitor/preferences": "^6.0.4",
     "@radix-ui/react-dialog": "^1.1.15",
     "@radix-ui/react-slot": "^1.2.4",
